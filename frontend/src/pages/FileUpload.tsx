@@ -3,6 +3,7 @@ import Layout from "../components/Layout";
 import logo from "../assets/logo.svg";
 import document from "../assets/document.svg";
 import file from "../assets/file.svg";
+import { generateUploadUrl } from "../services/documentsService";
 
 function FileUpload() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -112,6 +113,30 @@ function FileUpload() {
     }
   }, [selectedFile]);
 
+  const handleUploadToS3 = async () => {
+    if (!selectedFile) return;
+
+    try {
+      const userEmail = localStorage.getItem("userEmail")!;
+      const { uploadUrl, s3Filename, documentId } = await generateUploadUrl({
+        userEmail,
+        originalFilename: selectedFile.name,
+      });
+
+      // Upload file directly to S3 using the pre-signed URL
+      await fetch(uploadUrl, {
+        method: "PUT",
+        body: selectedFile,
+        headers: {
+          "Content-Type": selectedFile.type,
+        },
+      });
+
+      console.log("File uploaded successfully!", { s3Filename, documentId });
+    } catch (err) {
+      console.error("Failed to upload file", err);
+    }
+  };
   return (
     <Layout>
       <div className="card bg-base-100 shadow-xl min-w-1/2 rounded-xl m-10">
@@ -264,7 +289,7 @@ function FileUpload() {
 
           {selectedFile && !error && (
             <div className="mt-6 text-center">
-              <button className="btn btn-primary w-full">Submit File</button>
+              <button className="btn btn-primary w-full"onClick={handleUploadToS3}>Submit File</button>
             </div>
           )}
         </div>
