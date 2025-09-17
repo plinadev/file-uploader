@@ -4,6 +4,7 @@ import logo from "../assets/logo.svg";
 import document from "../assets/document.svg";
 import file from "../assets/file.svg";
 import { generateUploadUrl } from "../services/documentsService";
+import { useSaveDocument } from "../hooks/documents/useSaveDocument";
 
 function FileUpload() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -11,6 +12,7 @@ function FileUpload() {
   const [error, setError] = useState<string>("");
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { saveDocument, isSaving } = useSaveDocument();
 
   const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB in bytes
   const ALLOWED_EXTENSIONS = [".pdf", ".docx"];
@@ -112,30 +114,11 @@ function FileUpload() {
       setPreviewUrl(null);
     }
   }, [selectedFile]);
-
-  const handleUploadToS3 = async () => {
+  const handleUpload = async () => {
     if (!selectedFile) return;
 
-    try {
-      const userEmail = localStorage.getItem("userEmail")!;
-      const { uploadUrl, s3Filename, documentId } = await generateUploadUrl({
-        userEmail,
-        originalFilename: selectedFile.name,
-      });
-
-      // Upload file directly to S3 using the pre-signed URL
-      await fetch(uploadUrl, {
-        method: "PUT",
-        body: selectedFile,
-        headers: {
-          "Content-Type": selectedFile.type,
-        },
-      });
-
-      console.log("File uploaded successfully!", { s3Filename, documentId });
-    } catch (err) {
-      console.error("Failed to upload file", err);
-    }
+    const userEmail = localStorage.getItem("userEmail")!;
+    saveDocument({ file: selectedFile, userEmail });
   };
   return (
     <Layout>
@@ -289,7 +272,17 @@ function FileUpload() {
 
           {selectedFile && !error && (
             <div className="mt-6 text-center">
-              <button className="btn btn-primary w-full"onClick={handleUploadToS3}>Submit File</button>
+              <button
+                className="btn btn-primary w-full"
+                onClick={handleUpload}
+                disabled={isSaving}
+              >
+                {isSaving ? (
+                  <span className="loading loading-infinity loading-lg"></span>
+                ) : (
+                  "Submit File"
+                )}
+              </button>
             </div>
           )}
         </div>

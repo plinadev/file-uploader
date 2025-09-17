@@ -1,3 +1,4 @@
+import axios from "axios";
 import apiClient from "./apiClient";
 
 interface GenerateUploadUrlPaylod {
@@ -19,4 +20,15 @@ export const generateUploadUrl = async (
     payload
   );
   return response.data;
+};
+
+export const uploadFileToS3 = async (
+  file: File,
+  uploadUrl: string
+): Promise<void> => {
+  await axios.put(uploadUrl, file, {
+    headers: {
+      "Content-Type": file.type,
+    },
+  });
 };

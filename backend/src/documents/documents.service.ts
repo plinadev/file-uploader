@@ -54,6 +54,9 @@ export class DocumentsService {
       documentId: document._id,
     };
   }
+  async updateStatus(s3Filename: string, status: 'success' | 'error') {
+    await this.documentModel.updateOne({ s3Filename }, { status });
+  }
 
   private getMimeType(filename: string): string {
     if (filename.endsWith('.pdf')) return 'application/pdf';
