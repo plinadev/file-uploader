@@ -1,14 +1,23 @@
-import { Injectable } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { v4 as uuidv4 } from 'uuid';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { DocumentDoc } from './schemas/document.schema';
 
 @Injectable()
 export class DocumentsService {
   private s3: S3Client;
+  private logger = new Logger(DocumentsService.name);
 
   constructor(
     @InjectModel(DocumentDoc.name)
@@ -56,6 +65,57 @@ export class DocumentsService {
   }
   async updateStatus(s3Filename: string, status: 'success' | 'error') {
     await this.documentModel.updateOne({ s3Filename }, { status });
+  }
+
+  async findByUserEmail(userEmail: string) {
+    try {
+      const docs = await this.documentModel
+        .find({ userEmail })
+        .select('userFilename uploadedAt status s3Filename')
+        .sort({ uploadedAt: -1 })
+        .exec();
+
+      const results = await Promise.all(
+        docs.map(async (doc) => {
+          let fileContent: Buffer | null = null;
+
+          if (doc.s3Filename) {
+            try {
+              const data = await this.s3.send(
+                new GetObjectCommand({
+                  Bucket: process.env.AWS_S3_BUCKET!,
+                  Key: doc.s3Filename,
+                }),
+              );
+
+              if (!data.Body) throw new Error('Empty S3 object');
+
+              const arrayBuffer = await data.Body.transformToByteArray();
+              fileContent = Buffer.from(arrayBuffer);
+            } catch (s3Err) {
+              this.logger.error(
+                `Failed to fetch file ${doc.s3Filename} from S3`,
+                s3Err,
+              );
+            }
+          }
+
+          return {
+            id: doc._id,
+            userFilename: doc.userFilename,
+            uploadedAt: doc.uploadedAt,
+            status: doc.status,
+            s3Filename: doc.s3Filename,
+            fileContent,
+          };
+        }),
+      );
+
+      return results;
+    } catch (err) {
+      this.logger.error('Error fetching documents', err);
+      throw new InternalServerErrorException('Failed to fetch documents');
+    }
   }
 
   private getMimeType(filename: string): string {

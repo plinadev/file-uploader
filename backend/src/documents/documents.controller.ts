@@ -1,4 +1,4 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { DocumentsService } from './documents.service';
 
 @Controller('documents')
@@ -13,5 +13,10 @@ export class DocumentsController {
       body.userEmail,
       body.originalFilename,
     );
+  }
+
+  @Get()
+  async listDocuments(@Query('userEmail') userEmail: string) {
+    return this.documentsService.findByUserEmail(userEmail);
   }
 }
