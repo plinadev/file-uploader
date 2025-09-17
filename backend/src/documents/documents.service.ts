@@ -33,7 +33,8 @@ export class DocumentsService {
   }
 
   async generateUploadUrl(userEmail: string, originalFilename: string) {
-    const s3Filename = `${uuidv4()}-${originalFilename}`;
+    const sanitizedFilename = originalFilename.replace(/\s+/g, '_');
+    const s3Filename = `${uuidv4()}-${sanitizedFilename}`;
     const bucket = process.env.AWS_S3_BUCKET;
 
     // Create S3 command for upload
@@ -77,24 +78,21 @@ export class DocumentsService {
 
       const results = await Promise.all(
         docs.map(async (doc) => {
-          let fileContent: Buffer | null = null;
+          let fileUrl: string | null = null;
 
           if (doc.s3Filename) {
             try {
-              const data = await this.s3.send(
-                new GetObjectCommand({
-                  Bucket: process.env.AWS_S3_BUCKET!,
-                  Key: doc.s3Filename,
-                }),
-              );
-
-              if (!data.Body) throw new Error('Empty S3 object');
-
-              const arrayBuffer = await data.Body.transformToByteArray();
-              fileContent = Buffer.from(arrayBuffer);
+              // Generate a signed URL valid for 5 minutes
+              const command = new GetObjectCommand({
+                Bucket: process.env.AWS_S3_BUCKET!,
+                Key: doc.s3Filename,
+              });
+              fileUrl = await getSignedUrl(this.s3, command, {
+                expiresIn: 300,
+              });
             } catch (s3Err) {
               this.logger.error(
-                `Failed to fetch file ${doc.s3Filename} from S3`,
+                `Failed to generate signed URL for ${doc.s3Filename}`,
                 s3Err,
               );
             }
@@ -106,7 +104,7 @@ export class DocumentsService {
             uploadedAt: doc.uploadedAt,
             status: doc.status,
             s3Filename: doc.s3Filename,
-            fileContent,
+            fileUrl, // <-- pre-signed URL for frontend preview/download
           };
         }),
       );

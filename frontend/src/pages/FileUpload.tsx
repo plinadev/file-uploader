@@ -3,7 +3,6 @@ import Layout from "../components/Layout";
 import logo from "../assets/logo.svg";
 import document from "../assets/document.svg";
 import file from "../assets/file.svg";
-import { generateUploadUrl } from "../services/documentsService";
 import { useSaveDocument } from "../hooks/documents/useSaveDocument";
 
 function FileUpload() {

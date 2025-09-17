@@ -1,5 +1,6 @@
 import axios from "axios";
 import apiClient from "./apiClient";
+import type { Document } from "../types";
 
 interface GenerateUploadUrlPaylod {
   userEmail: string;
@@ -31,4 +32,24 @@ export const uploadFileToS3 = async (
       "Content-Type": file.type,
     },
   });
+};
+
+export const getUserDocuments = async ({
+  userEmail,
+}: {
+  userEmail: string;
+}) => {
+  try {
+    const params = new URLSearchParams();
+    params.append("userEmail", userEmail);
+    const response = await apiClient.get(`/documents?${params.toString()}`);
+
+    return response.data as Document[];
+  } catch (error: any) {
+    console.error(
+      "Error fetching documents:",
+      error.response?.data || error.message
+    );
+    throw error;
+  }
 };

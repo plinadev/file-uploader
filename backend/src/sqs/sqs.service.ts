@@ -64,42 +64,100 @@ export class SqsService {
       }
 
       const body = JSON.parse(msg.Body);
-
-      // S3 event notifications have a Records array
       if (!body.Records || body.Records.length === 0) {
         this.logger.warn('No Records in message body, skipping');
         return;
       }
 
       const record = body.Records[0];
+      if (!record.s3 || !record.s3.bucket?.name || !record.s3.object?.key) {
+        this.logger.warn('Invalid S3 record, skipping');
+        return;
+      }
+
       s3Info = {
         bucket: { name: record.s3.bucket.name },
-        object: { key: record.s3.object.key },
+        object: { key: decodeURIComponent(record.s3.object.key as string) },
       };
 
       this.logger.log(`Processing S3 file: ${s3Info.object.key}`);
 
-      // Download file from S3
-      const fileBuffer = await this.downloadFile(
-        s3Info.bucket.name,
-        s3Info.object.key,
-      );
+      let fileBuffer: Buffer | null = null;
+
+      try {
+        fileBuffer = await this.downloadFile(
+          s3Info.bucket.name,
+          s3Info.object.key,
+        );
+      } catch (s3Err) {
+        this.logger.error(
+          `Failed to download S3 file: ${s3Info.object.key}`,
+          s3Err,
+        );
+
+        try {
+          await this.documentsService.updateStatus(s3Info.object.key, 'error');
+        } catch (dbErr) {
+          this.logger.warn(
+            `Could not update status in MongoDB for ${s3Info.object.key} (maybe already deleted)`,
+            dbErr,
+          );
+        }
+
+        // Always delete the SQS message so it won’t retry forever
+        if (msg.ReceiptHandle) {
+          try {
+            await this.sqs.send(
+              new DeleteMessageCommand({
+                QueueUrl: queueUrl,
+                ReceiptHandle: msg.ReceiptHandle,
+              }),
+            );
+          } catch (delErr) {
+            this.logger.error(
+              'Failed to delete SQS message after S3 error',
+              delErr,
+            );
+          }
+        }
+
+        return; 
+      }
 
       // Parse file content
-      const text = s3Info.object.key.endsWith('.pdf')
-        ? await parsePdf(fileBuffer)
-        : await parseDocx(fileBuffer);
+      let text = '';
+      try {
+        text = s3Info.object.key.endsWith('.pdf')
+          ? await parsePdf(fileBuffer)
+          : await parseDocx(fileBuffer);
+      } catch (parseErr) {
+        this.logger.error(
+          `Failed to parse file: ${s3Info.object.key}`,
+          parseErr,
+        );
+        await this.documentsService.updateStatus(s3Info.object.key, 'error');
+        return;
+      }
 
       // Index into OpenSearch
-      await OpenSearchClient.index({
-        index: 'documents',
-        body: { text, metadata: s3Info.object.key },
-      });
+      try {
+        await OpenSearchClient.index({
+          index: 'documents',
+          body: { text, metadata: s3Info.object.key },
+        });
+      } catch (osErr) {
+        this.logger.error(
+          `Failed to index file in OpenSearch: ${s3Info.object.key}`,
+          osErr,
+        );
+        await this.documentsService.updateStatus(s3Info.object.key, 'error');
+        return;
+      }
 
-      // Update MongoDB document status
+      // Success: update status
       await this.documentsService.updateStatus(s3Info.object.key, 'success');
 
-      // Delete the message from SQS
+      // Delete message from SQS
       if (msg.ReceiptHandle) {
         await this.sqs.send(
           new DeleteMessageCommand({
@@ -109,16 +167,21 @@ export class SqsService {
         );
       }
     } catch (err) {
-      this.logger.error('Error handling SQS message', err as any);
-
-      // Update document status to error in MongoDB
-      if (s3Info) {
+      this.logger.error('Unexpected error handling SQS message', err);
+      // Try to mark as error and delete message to prevent endless retries
+      if (s3Info?.object?.key && msg.ReceiptHandle) {
         try {
           await this.documentsService.updateStatus(s3Info.object.key, 'error');
-        } catch (mongoErr) {
+          await this.sqs.send(
+            new DeleteMessageCommand({
+              QueueUrl: queueUrl,
+              ReceiptHandle: msg.ReceiptHandle,
+            }),
+          );
+        } catch (cleanupErr) {
           this.logger.error(
-            'Failed to update document status',
-            mongoErr as any,
+            'Failed to mark document as error or delete SQS message',
+            cleanupErr,
           );
         }
       }
