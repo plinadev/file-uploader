@@ -151,16 +151,18 @@ export class SqsService {
           );
           return;
         }
-
-        const documentId = document._id.toString();
+        console.log(document);
         await OpenSearchClient.index({
           index: 'documents',
-          id: documentId, // MongoDB _id
+          id: document._id.toString(),
           body: {
             text,
-            metadata: s3Info.object.key,
+            metadata: document.userFilename,
+            userEmail: document.userEmail,
+            uploadedAt: document.uploadedAt,
+            s3Filename: document.s3Filename,
           },
-          refresh: true, // ensures it's searchable immediately
+          refresh: true,
         });
       } catch (osErr) {
         this.logger.error(

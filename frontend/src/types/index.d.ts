@@ -5,4 +5,5 @@ export type Document = {
   status: "pending" | "success" | "error";
   s3Filename: string;
   fileUrl: string | null;
+  snippet?: string | null;
 };

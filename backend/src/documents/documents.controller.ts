@@ -24,8 +24,11 @@ export class DocumentsController {
   }
 
   @Get()
-  async listDocuments(@Query('userEmail') userEmail: string) {
-    return this.documentsService.findByUserEmail(userEmail);
+  async listDocuments(
+    @Query('userEmail') userEmail: string,
+    @Query('search') search?: string,
+  ) {
+    return this.documentsService.findByUserEmail(userEmail, search);
   }
   @Delete(':id')
   async deleteDocument(@Param('id') id: string) {

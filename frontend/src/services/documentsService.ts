@@ -36,14 +36,16 @@ export const uploadFileToS3 = async (
 
 export const getUserDocuments = async ({
   userEmail,
+  search,
 }: {
   userEmail: string;
+  search?: string;
 }) => {
   try {
     const params = new URLSearchParams();
     params.append("userEmail", userEmail);
+    if (search) params.append("search", search);
     const response = await apiClient.get(`/documents?${params.toString()}`);
-
     return response.data as Document[];
   } catch (error: any) {
     console.error(

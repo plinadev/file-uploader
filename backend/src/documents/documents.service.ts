@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unsafe-return */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 import {
@@ -18,7 +20,6 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { DocumentDoc } from './schemas/document.schema';
 import { OpenSearchClient } from 'src/lib/opensearch.client';
-
 @Injectable()
 export class DocumentsService {
   private s3: S3Client;
@@ -73,21 +74,75 @@ export class DocumentsService {
     await this.documentModel.updateOne({ s3Filename }, { status });
   }
 
-  async findByUserEmail(userEmail: string) {
+  async findByUserEmail(userEmail: string, search?: string) {
     try {
-      const docs = await this.documentModel
-        .find({ userEmail })
-        .select('userFilename uploadedAt status s3Filename')
-        .sort({ uploadedAt: -1 })
-        .exec();
+      let mongoDocsMap: Record<string, any> = {};
+      let hits: any[] = [];
 
+      if (search) {
+        const result = await OpenSearchClient.search({
+          index: 'documents',
+          body: {
+            query: {
+              bool: {
+                must: [
+                  {
+                    match: {
+                      text: {
+                        query: search,
+                        fuzziness: 'AUTO',
+                      },
+                    },
+                  },
+                ],
+                filter: [{ match: { userEmail } }], // exact match on userEmail
+              },
+            },
+            highlight: {
+              fields: { text: {} },
+              pre_tags: ['<mark>'],
+              post_tags: ['</mark>'],
+            },
+          },
+        });
+
+        hits = (result.body as any).hits?.hits ?? [];
+        const ids = hits.map((hit: any) => hit._id);
+
+        // 2️⃣ Fetch MongoDB documents for these IDs
+        const mongoDocs = await this.documentModel
+          .find({ _id: { $in: ids } })
+          .exec();
+
+        mongoDocsMap = mongoDocs.reduce(
+          (acc, doc) => {
+            acc[doc._id.toString()] = doc;
+            return acc;
+          },
+          {} as Record<string, any>,
+        );
+      } else {
+        // 3️⃣ No search → get all docs for this user
+        const mongoDocs = await this.documentModel.find({ userEmail }).exec();
+        hits = mongoDocs.map((doc) => ({ _id: doc._id.toString() }));
+        mongoDocsMap = mongoDocs.reduce(
+          (acc, doc) => {
+            acc[doc._id.toString()] = doc;
+            return acc;
+          },
+          {} as Record<string, any>,
+        );
+      }
+
+      // 4️⃣ Build final result array with S3 URLs
       const results = await Promise.all(
-        docs.map(async (doc) => {
-          let fileUrl: string | null = null;
+        hits.map(async (hit: any) => {
+          const doc = mongoDocsMap[hit._id];
+          if (!doc) return null;
 
+          let fileUrl: string | null = null;
           if (doc.s3Filename) {
             try {
-              // Generate a signed URL valid for 5 minutes
               const command = new GetObjectCommand({
                 Bucket: process.env.AWS_S3_BUCKET!,
                 Key: doc.s3Filename,
@@ -110,11 +165,12 @@ export class DocumentsService {
             status: doc.status,
             s3Filename: doc.s3Filename,
             fileUrl,
+            snippet: hit.highlight?.text?.[0] ?? null, // highlight from OpenSearch
           };
         }),
       );
 
-      return results;
+      return results.filter(Boolean); // remove nulls just in case
     } catch (err) {
       this.logger.error('Error fetching documents', err);
       throw new InternalServerErrorException('Failed to fetch documents');
