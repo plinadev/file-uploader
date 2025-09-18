@@ -1,17 +1,21 @@
 import Layout from "../components/Layout";
+import Loader from "../components/Loader";
+import { useDeleteDocument } from "../hooks/documents/useDeleteDocument";
 import { useDocuments } from "../hooks/documents/useDocuments";
 import type { Document } from "../types";
 import { FcDocument, FcDownload, FcFile, FcFullTrash } from "react-icons/fc";
 import { HiPlus } from "react-icons/hi";
 import { useNavigate } from "react-router-dom";
+import file from "../assets/file.svg";
 
 function Documents() {
   const { documents, isFetching, error } = useDocuments();
   const navigate = useNavigate();
+  const { deleteDocument, isDeleting } = useDeleteDocument();
   const getStatusBadge = (status: Document["status"]) => {
     switch (status) {
       case "success":
-        return <div className="badge bg-emerald-100">Success</div>;
+        return <div className="badge bg-emerald-200">Success</div>;
       case "pending":
         return <div className="badge badge-warning">Pending</div>;
       case "error":
@@ -72,6 +76,7 @@ function Documents() {
 
   return (
     <Layout>
+      {isDeleting && <Loader />}
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
@@ -82,9 +87,9 @@ function Documents() {
         </div>
 
         {/* Search and Controls */}
-        <div className="card bg-base-100 shadow-lg  rounded-xl">
+        <div className="card bg-base-100 shadow-lg rounded-xl">
           <div className="card-body">
-            <div className="flex flex-col md:flex-row justify-between items-center">
+            <div className="flex flex-col md:flex-row justify-between gap-4 items-center">
               {/* Search Input */}
               <label className="input w-[60%]">
                 <svg
@@ -141,12 +146,12 @@ function Documents() {
         {!isFetching && documents.length === 0 && (
           <div className="card bg-base-100 shadow-lg">
             <div className="card-body text-center py-16">
-              <div className="text-6xl mb-4">📁</div>
-              <h2 className="text-2xl font-bold mb-2">No Documents Found</h2>
+              <img src={file} alt="file" className="w-15 m-auto" />
+
+              <h2 className="text-2xl font-bold mb-2"> No Documents Found</h2>
               <p className="text-base-content/60 mb-6">
-                {documents.length === 0
-                  ? "No documents match your search criteria."
-                  : "You haven't uploaded any documents yet."}
+                {documents.length === 0 &&
+                  "You haven't uploaded any documents or none of them match your search criteria"}
               </p>
             </div>
           </div>
@@ -201,21 +206,22 @@ function Documents() {
                         </td>
                         <td>
                           <div className="flex gap-2">
-                            {document.fileUrl &&
-                              document.status === "success" && (
-                                <a
-                                  href={document.fileUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="btn btn-ghost btn-sm"
-                                  title="View Document"
-                                >
-                                  <FcDownload size={22} />
-                                </a>
-                              )}
+                            {document.fileUrl && (
+                              <a
+                                href={document.fileUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="btn btn-ghost btn-sm"
+                                title="View Document"
+                              >
+                                <FcDownload size={22} />
+                              </a>
+                            )}
                             <button
                               className="btn btn-ghost btn-sm"
                               title="More Options"
+                              disabled={isDeleting}
+                              onClick={() => deleteDocument(document.id)}
                             >
                               <FcFullTrash size={22} />
                             </button>

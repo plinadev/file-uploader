@@ -161,6 +161,10 @@ export class DocumentsService {
     }
   }
 
+  async findByS3Key(s3Key: string) {
+    return this.documentModel.findOne({ s3Filename: s3Key }).exec();
+  }
+
   private getMimeType(filename: string): string {
     if (filename.endsWith('.pdf')) return 'application/pdf';
     if (filename.endsWith('.docx'))

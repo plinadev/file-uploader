@@ -121,7 +121,7 @@ export class SqsService {
           }
         }
 
-        return; 
+        return;
       }
 
       // Parse file content
@@ -141,9 +141,26 @@ export class SqsService {
 
       // Index into OpenSearch
       try {
+        const document = await this.documentsService.findByS3Key(
+          s3Info.object.key,
+        );
+
+        if (!document) {
+          this.logger.warn(
+            `No MongoDB document found for S3 key: ${s3Info.object.key}`,
+          );
+          return;
+        }
+
+        const documentId = document._id.toString();
         await OpenSearchClient.index({
           index: 'documents',
-          body: { text, metadata: s3Info.object.key },
+          id: documentId, // MongoDB _id
+          body: {
+            text,
+            metadata: s3Info.object.key,
+          },
+          refresh: true, // ensures it's searchable immediately
         });
       } catch (osErr) {
         this.logger.error(

@@ -53,3 +53,16 @@ export const getUserDocuments = async ({
     throw error;
   }
 };
+
+export const deleteDocument = async (id: string) => {
+  try {
+    const response = await apiClient.delete(`/documents/${id}`);
+    return response;
+  } catch (error: any) {
+    console.error(
+      "Error deleting document ",
+      error.response?.data || error.message
+    );
+    throw error;
+  }
+};
