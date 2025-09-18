@@ -1,5 +1,5 @@
 export type Document = {
-  _id: string;
+  id: string;
   userFilename: string;
   uploadedAt: string;
   status: "pending" | "success" | "error";

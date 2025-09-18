@@ -4,6 +4,8 @@ import logo from "../assets/logo.svg";
 import document from "../assets/document.svg";
 import file from "../assets/file.svg";
 import { useSaveDocument } from "../hooks/documents/useSaveDocument";
+import { useNavigate } from "react-router-dom";
+import { HiArrowRight } from "react-icons/hi";
 
 function FileUpload() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -12,6 +14,7 @@ function FileUpload() {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { saveDocument, isSaving } = useSaveDocument();
+  const navigate = useNavigate();
 
   const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB in bytes
   const ALLOWED_EXTENSIONS = [".pdf", ".docx"];
@@ -285,6 +288,12 @@ function FileUpload() {
             </div>
           )}
         </div>
+        <button
+          className="btn mt-2 mb-6 rounded-none"
+          onClick={() => navigate("/documents")}
+        >
+          Go to documents <HiArrowRight />
+        </button>
       </div>
     </Layout>
   );

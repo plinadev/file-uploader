@@ -42,6 +42,9 @@ input:focus-visible {
   outline: none;
 }
 
+label:focus-within {
+  outline: none;
+}
 textarea:focus-visible {
   outline: none;
 }

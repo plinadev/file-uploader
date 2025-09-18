@@ -1,4 +1,4 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   generateUploadUrl,
   uploadFileToS3,
@@ -13,6 +13,7 @@ interface SaveDocumentPayload {
 
 export const useSaveDocument = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const { mutate: saveDocument, isPending: isSaving } = useMutation({
     mutationFn: async ({ file, userEmail }: SaveDocumentPayload) => {
@@ -25,10 +26,14 @@ export const useSaveDocument = () => {
       // upload file to S3
       await uploadFileToS3(file, uploadUrl);
 
-      return documentId;
+      return { documentId, userEmail };
     },
-    onSuccess: () => {
+    onSuccess: ({ userEmail }) => {
       toast.success("Document was successfully saved!");
+      // Invalidate documents query so list refreshes
+      queryClient.invalidateQueries({
+        queryKey: ["documents", userEmail],
+      });
       navigate("/documents");
     },
     onError: () => {

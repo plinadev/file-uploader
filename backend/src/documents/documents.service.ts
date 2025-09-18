@@ -1,7 +1,10 @@
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-call */
 import {
   Injectable,
   InternalServerErrorException,
   Logger,
+  NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -10,9 +13,11 @@ import {
   S3Client,
   PutObjectCommand,
   GetObjectCommand,
+  DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { DocumentDoc } from './schemas/document.schema';
+import { OpenSearchClient } from 'src/lib/opensearch.client';
 
 @Injectable()
 export class DocumentsService {
@@ -104,7 +109,7 @@ export class DocumentsService {
             uploadedAt: doc.uploadedAt,
             status: doc.status,
             s3Filename: doc.s3Filename,
-            fileUrl, // <-- pre-signed URL for frontend preview/download
+            fileUrl,
           };
         }),
       );
@@ -113,6 +118,46 @@ export class DocumentsService {
     } catch (err) {
       this.logger.error('Error fetching documents', err);
       throw new InternalServerErrorException('Failed to fetch documents');
+    }
+  }
+
+  async deleteDocument(documentId: string) {
+    const doc = await this.documentModel.findById(documentId);
+    if (!doc) {
+      throw new NotFoundException(`Document with ID ${documentId} not found`);
+    }
+    const bucket = process.env.AWS_S3_BUCKET;
+    const s3Key = doc.s3Filename;
+
+    try {
+      //deleting from s3
+      await this.s3.send(
+        new DeleteObjectCommand({
+          Bucket: bucket,
+          Key: s3Key,
+        }),
+      );
+
+      //deleting from opensearch
+      try {
+        await OpenSearchClient.delete({
+          index: 'documents',
+          id: documentId,
+        });
+      } catch (osErr) {
+        this.logger.warn(
+          `Failed to delete from OpenSearch from ${documentId}`,
+          osErr,
+        );
+      }
+
+      //deleting from mongodb
+      await this.documentModel.deleteOne({ _id: documentId });
+
+      this.logger.log(`Deleted document ${documentId}`);
+    } catch (error) {
+      this.logger.error(`Failed to delete document ${documentId}`, error);
+      throw new InternalServerErrorException('Failed to delete document');
     }
   }
 
