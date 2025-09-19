@@ -44,17 +44,14 @@ export class DocumentsService {
     const s3Filename = `${uuidv4()}-${sanitizedFilename}`;
     const bucket = process.env.AWS_S3_BUCKET;
 
-    // Create S3 command for upload
     const command = new PutObjectCommand({
       Bucket: bucket,
       Key: s3Filename,
       ContentType: this.getMimeType(originalFilename),
     });
 
-    // Generate pre-signed URL (valid for 60s)
     const uploadUrl = await getSignedUrl(this.s3, command, { expiresIn: 60 });
 
-    // Save metadata to MongoDB
     const document = new this.documentModel({
       userEmail,
       userFilename: originalFilename,
@@ -110,9 +107,10 @@ export class DocumentsService {
                     },
                   },
                 ],
-                filter: [{ match: { userEmail } }], // exact match on userEmail
+                filter: [{ match: { userEmail } }],
               },
             },
+            sort: [{ uploadedAt: { order: 'desc' } }],
             highlight: {
               fields: { text: {} },
               pre_tags: ['<mark>'],
@@ -124,7 +122,6 @@ export class DocumentsService {
         hits = (result.body as any).hits?.hits ?? [];
         const ids = hits.map((hit: any) => hit._id);
 
-        // 2️⃣ Fetch MongoDB documents for these IDs
         const mongoDocs = await this.documentModel
           .find({ _id: { $in: ids } })
           .exec();
@@ -137,8 +134,10 @@ export class DocumentsService {
           {} as Record<string, any>,
         );
       } else {
-        // 3️⃣ No search → get all docs for this user
-        const mongoDocs = await this.documentModel.find({ userEmail }).exec();
+        const mongoDocs = await this.documentModel
+          .find({ userEmail })
+          .sort({ uploadedAt: -1 })
+          .exec();
         hits = mongoDocs.map((doc) => ({ _id: doc._id.toString() }));
         mongoDocsMap = mongoDocs.reduce(
           (acc, doc) => {
@@ -149,7 +148,6 @@ export class DocumentsService {
         );
       }
 
-      // 4️⃣ Build final result array with S3 URLs
       const results = await Promise.all(
         hits.map(async (hit: any) => {
           const doc = mongoDocsMap[hit._id];
@@ -180,12 +178,12 @@ export class DocumentsService {
             status: doc.status,
             s3Filename: doc.s3Filename,
             fileUrl,
-            snippet: hit.highlight?.text?.[0] ?? null, // highlight from OpenSearch
+            snippet: hit.highlight?.text?.[0] ?? null,
           };
         }),
       );
 
-      return results.filter(Boolean); // remove nulls just in case
+      return results.filter(Boolean);
     } catch (err) {
       this.logger.error('Error fetching documents', err);
       throw new InternalServerErrorException('Failed to fetch documents');

@@ -30,7 +30,6 @@ export class SqsService {
     this.s3 = new S3Client({ region: process.env.AWS_REGION });
   }
 
-  /** Start polling SQS indefinitely */
   async startPolling() {
     const queueUrl = process.env.AWS_SQS_URL!;
     const params = {
@@ -53,7 +52,6 @@ export class SqsService {
     }
   }
 
-  /** Handle a single SQS message */
   private async handleMessage(msg: Message, queueUrl: string) {
     let s3Info: S3Record | null = null;
 
@@ -104,7 +102,6 @@ export class SqsService {
           );
         }
 
-        // Always delete the SQS message so it won’t retry forever
         if (msg.ReceiptHandle) {
           try {
             await this.sqs.send(
@@ -124,7 +121,6 @@ export class SqsService {
         return;
       }
 
-      // Parse file content
       let text = '';
       try {
         text = s3Info.object.key.endsWith('.pdf')
@@ -139,7 +135,6 @@ export class SqsService {
         return;
       }
 
-      // Index into OpenSearch
       try {
         const document = await this.documentsService.findByS3Key(
           s3Info.object.key,
@@ -172,10 +167,8 @@ export class SqsService {
         return;
       }
 
-      // Success: update status
       await this.documentsService.updateStatus(s3Info.object.key, 'success');
 
-      // Delete message from SQS
       if (msg.ReceiptHandle) {
         await this.sqs.send(
           new DeleteMessageCommand({
@@ -186,7 +179,6 @@ export class SqsService {
       }
     } catch (err) {
       this.logger.error('Unexpected error handling SQS message', err);
-      // Try to mark as error and delete message to prevent endless retries
       if (s3Info?.object?.key && msg.ReceiptHandle) {
         try {
           await this.documentsService.updateStatus(s3Info.object.key, 'error');
@@ -206,7 +198,6 @@ export class SqsService {
     }
   }
 
-  /** Download a file from S3 and return as Buffer */
   private async downloadFile(bucket: string, key: string): Promise<Buffer> {
     const command = new GetObjectCommand({ Bucket: bucket, Key: key });
     const data = await this.s3.send(command);
@@ -215,7 +206,6 @@ export class SqsService {
       throw new Error(`S3 object ${key} is empty`);
     }
 
-    // Transform readable stream to Buffer
     const arrayBuffer = await data.Body.transformToByteArray();
     return Buffer.from(arrayBuffer);
   }
