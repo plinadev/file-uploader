@@ -107,7 +107,7 @@ export class DocumentsService {
                     },
                   },
                 ],
-                filter: [{ match: { userEmail } }],
+                filter: [{ term: { 'userEmail.keyword': userEmail } }],
               },
             },
             sort: [{ uploadedAt: { order: 'desc' } }],
