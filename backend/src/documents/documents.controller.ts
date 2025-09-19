@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import {
   Body,
   Controller,
@@ -6,8 +7,10 @@ import {
   Param,
   Post,
   Query,
+  Sse,
 } from '@nestjs/common';
 import { DocumentsService } from './documents.service';
+import { map, Observable } from 'rxjs';
 
 @Controller('documents')
 export class DocumentsController {
@@ -33,5 +36,21 @@ export class DocumentsController {
   @Delete(':id')
   async deleteDocument(@Param('id') id: string) {
     return this.documentsService.deleteDocument(id);
+  }
+
+  @Sse('stream')
+  stream(@Query('userEmail') userEmail: string): Observable<MessageEvent<any>> {
+    if (!userEmail) {
+      throw new Error('userEmail is required');
+    }
+
+    return this.documentsService.subscribeToUser(userEmail).pipe(
+      map(
+        (docUpdate) =>
+          ({
+            data: docUpdate,
+          }) as MessageEvent<any>,
+      ),
+    );
   }
 }

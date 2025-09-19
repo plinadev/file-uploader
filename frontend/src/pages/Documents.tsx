@@ -8,6 +8,7 @@ import { FcDocument, FcDownload, FcFile, FcFullTrash } from "react-icons/fc";
 import { HiPlus, HiX, HiXCircle } from "react-icons/hi";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import file from "../assets/file.svg";
+import { useDocumentSSE } from "../hooks/useDocumentSSE";
 
 function useDebounce<T>(value: T, delay: number): T {
   const [debouncedValue, setDebouncedValue] = useState<T>(value);
@@ -26,6 +27,7 @@ function useDebounce<T>(value: T, delay: number): T {
 }
 
 function Documents() {
+  useDocumentSSE();
   const { documents, isFetching, error } = useDocuments();
   const navigate = useNavigate();
   const { deleteDocument, isDeleting } = useDeleteDocument();
@@ -356,18 +358,17 @@ function Documents() {
                       )}
                       <td>
                         <div className="flex gap-1">
-                          {document.fileUrl &&
-                            document.status === "success" && (
-                              <a
-                                href={document.fileUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="btn btn-ghost btn-sm "
-                                title="Download Document"
-                              >
-                                <FcDownload className="w-5 h-5" />
-                              </a>
-                            )}
+                          {document.fileUrl && (
+                            <a
+                              href={document.fileUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="btn btn-ghost btn-sm "
+                              title="Download Document"
+                            >
+                              <FcDownload className="w-5 h-5" />
+                            </a>
+                          )}
                           <button
                             className="btn btn-ghost btn-sm "
                             title="Delete Document"

@@ -20,11 +20,12 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { DocumentDoc } from './schemas/document.schema';
 import { OpenSearchClient } from 'src/lib/opensearch.client';
+import { Observable, Subject } from 'rxjs';
 @Injectable()
 export class DocumentsService {
   private s3: S3Client;
   private logger = new Logger(DocumentsService.name);
-
+  private userStreams: Record<string, Subject<any>> = {};
   constructor(
     @InjectModel(DocumentDoc.name)
     private documentModel: Model<DocumentDoc>,
@@ -71,7 +72,21 @@ export class DocumentsService {
     };
   }
   async updateStatus(s3Filename: string, status: 'success' | 'error') {
-    await this.documentModel.updateOne({ s3Filename }, { status });
+    const doc = await this.documentModel.findOneAndUpdate(
+      { s3Filename },
+      { status },
+      { new: true },
+    );
+
+    if (!doc) return;
+
+    this.notifyUser(doc.userEmail, {
+      id: doc._id.toString(),
+      status: doc.status,
+      uploadedAt: doc.uploadedAt,
+      userFilename: doc.userFilename,
+      s3Filename: doc.s3Filename,
+    });
   }
 
   async findByUserEmail(userEmail: string, search?: string) {
@@ -219,6 +234,17 @@ export class DocumentsService {
 
   async findByS3Key(s3Key: string) {
     return this.documentModel.findOne({ s3Filename: s3Key }).exec();
+  }
+  subscribeToUser(userEmail: string): Observable<any> {
+    if (!this.userStreams[userEmail]) {
+      this.userStreams[userEmail] = new Subject();
+    }
+    return this.userStreams[userEmail].asObservable();
+  }
+  notifyUser(userEmail: string, update: any) {
+    if (this.userStreams[userEmail]) {
+      this.userStreams[userEmail].next(update);
+    }
   }
 
   private getMimeType(filename: string): string {

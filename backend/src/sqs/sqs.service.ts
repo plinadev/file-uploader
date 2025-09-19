@@ -151,7 +151,6 @@ export class SqsService {
           );
           return;
         }
-        console.log(document);
         await OpenSearchClient.index({
           index: 'documents',
           id: document._id.toString(),
